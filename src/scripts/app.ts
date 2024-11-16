@@ -1880,6 +1880,7 @@ export class ComfyApp {
     this.#addCopyHandler()
     this.#addPasteHandler()
     this.#addWidgetLinkHandling()
+    this.#addPostMessageHandler()
 
     await this.#invokeExtensionsAsync('setup')
   }
@@ -2976,6 +2977,80 @@ export class ComfyApp {
     const graphNode = this.graph.getNodeById(nodeId)
     if (!graphNode) return
     this.canvas.animateToBounds(graphNode.boundingRect)
+  }
+
+  /**
+   * 添加 postMessage 事件监听器，用于处理来自 Admin 页面的消息
+   */
+  #addPostMessageHandler() {
+    window.addEventListener('message', async (event) => {
+      // 验证消息来源，确保来自可信的源
+      const trustedOrigins = [import.meta.env.VITE_ADMIN_ORIGIN] // 替换为实际的 Admin 页面来源
+      if (!trustedOrigins.includes(event.origin)) {
+        console.warn('未信任的消息来源:', event.origin)
+        return
+      }
+
+      const { type, data } = event.data
+
+      if (type === 'loadWorkflow') {
+        console.log('收到来自 Admin 的消息:', data)
+        await this.handlePostMessage(data)
+      } else if (type === 'requestWorkflow') {
+        console.log('收到来自 Admin 的工作流请求')
+        await this.sendCurrentWorkflow()
+      }
+    })
+  }
+
+  /**
+   * 处理来自 postMessage 的工作流数据
+   * @param data 从 postMessage 接收到的数据
+   */
+  async handlePostMessage(data: any) {
+    try {
+      // 假设 data 是 API JSON 格式的数据
+      if (data && typeof data === 'object') {
+        await this.loadApiJson(data, 'postMessageWorkflow')
+        console.log('工作流已通过 postMessage 加载')
+      } else {
+        this.showErrorOnPostMessageLoad()
+      }
+    } catch (error) {
+      console.error('通过 postMessage 加载工作流时出错:', error)
+      this.ui.dialog.show('通过 postMessage 加载工作流时出错，请检查数据格式。')
+    }
+  }
+
+  /**
+   * 发送当前工作流的 API JSON 给 Admin
+   */
+  async sendCurrentWorkflow() {
+    try {
+      const apiJson = await app.graphToPrompt()
+      // 发送消息到父窗口 (Admin 页面)
+      window.parent.postMessage(
+        { type: 'returnCurrentWorkflow', data: apiJson.output },
+        import.meta.env.VITE_ADMIN_ORIGIN
+      )
+      console.log(apiJson)
+      console.log('当前工作流已发送到 Admin')
+    } catch (error) {
+      console.error('发送当前工作流到 Admin 时出错:', error)
+      this.ui.dialog.show('发送当前工作流到 Admin 时出错。')
+    }
+  }
+
+  /**
+   * 显示通过 postMessage 加载文件时的错误
+   * @param fileName 可选的文件名
+   */
+  showErrorOnPostMessageLoad(fileName: string = '未知文件') {
+    this.ui.dialog.show(
+      $el('div', [
+        $el('p', { textContent: `无法在 ${fileName} 中找到有效的工作流` })
+      ]).outerHTML
+    )
   }
 }
 

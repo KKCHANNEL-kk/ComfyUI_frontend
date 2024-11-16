@@ -92,6 +92,7 @@ function getModuleName(id: string): string {
 }
 
 const DEV_SERVER_COMFYUI_URL = process.env.DEV_SERVER_COMFYUI_URL || 'http://127.0.0.1:8188'
+console.log(process.env.DEV_SERVER_COMFYUI_URL)
 
 export default defineConfig({
   base: '',
@@ -104,6 +105,8 @@ export default defineConfig({
 
       '/api': {
         target: DEV_SERVER_COMFYUI_URL,
+        changeOrigin: true,
+        secure: false,
         // Return empty array for extensions API as these modules
         // are not on vite's dev server.
         bypass: (req, res, options) => {
@@ -116,7 +119,9 @@ export default defineConfig({
 
       '/ws': {
         target: DEV_SERVER_COMFYUI_URL,
-        ws: true
+        ws: true,
+        changeOrigin: true,
+        secure: false,
       },
 
       '/testsubrouteindex': {
