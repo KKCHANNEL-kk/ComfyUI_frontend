@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, Ref, ref, toRaw } from 'vue'
 import { Keybinding, KeyCombo } from '@/types/keyBindingTypes'
 import { useSettingStore } from './settingStore'
-import { CORE_KEYBINDINGS } from './coreKeybindings'
+import { CORE_KEYBINDINGS } from '@/constants/coreKeybindings'
 import type { ComfyExtension } from '@/types/comfy'
 
 export class KeybindingImpl implements Keybinding {
@@ -16,15 +16,14 @@ export class KeybindingImpl implements Keybinding {
     this.targetSelector = obj.targetSelector
   }
 
-  equals(other: any): boolean {
-    if (toRaw(other) instanceof KeybindingImpl) {
-      return (
-        this.commandId === other.commandId &&
-        this.combo.equals(other.combo) &&
-        this.targetSelector === other.targetSelector
-      )
-    }
-    return false
+  equals(other: unknown): boolean {
+    const raw = toRaw(other)
+
+    return raw instanceof KeybindingImpl
+      ? this.commandId === raw.commandId &&
+          this.combo.equals(raw.combo) &&
+          this.targetSelector === raw.targetSelector
+      : false
   }
 }
 
@@ -51,30 +50,19 @@ export class KeyComboImpl implements KeyCombo {
     })
   }
 
-  equals(other: any): boolean {
-    if (toRaw(other) instanceof KeyComboImpl) {
-      return (
-        this.key === other.key &&
-        this.ctrl === other.ctrl &&
-        this.alt === other.alt &&
-        this.shift === other.shift
-      )
-    }
-    return false
+  equals(other: unknown): boolean {
+    const raw = toRaw(other)
+
+    return raw instanceof KeyComboImpl
+      ? this.key.toUpperCase() === raw.key.toUpperCase() &&
+          this.ctrl === raw.ctrl &&
+          this.alt === raw.alt &&
+          this.shift === raw.shift
+      : false
   }
 
   serialize(): string {
-    return `${this.key}:${this.ctrl}:${this.alt}:${this.shift}`
-  }
-
-  deserialize(serialized: string): KeyComboImpl {
-    const [key, ctrl, alt, shift] = serialized.split(':')
-    return new KeyComboImpl({
-      key,
-      ctrl: ctrl === 'true',
-      alt: alt === 'true',
-      shift: shift === 'true'
-    })
+    return `${this.key.toUpperCase()}:${this.ctrl}:${this.alt}:${this.shift}`
   }
 
   toString(): string {
@@ -121,8 +109,7 @@ export const useKeybindingStore = defineStore('keybinding', () => {
 
   const keybindingByKeyCombo = computed<Record<string, KeybindingImpl>>(() => {
     const result: Record<string, KeybindingImpl> = {
-      ...defaultKeybindings.value,
-      ...userKeybindings.value
+      ...defaultKeybindings.value
     }
 
     for (const keybinding of Object.values(userUnsetKeybindings.value)) {
@@ -131,7 +118,11 @@ export const useKeybindingStore = defineStore('keybinding', () => {
         delete result[serializedCombo]
       }
     }
-    return result
+
+    return {
+      ...result,
+      ...userKeybindings.value
+    }
   })
 
   const keybindings = computed<KeybindingImpl[]>(() =>
@@ -218,7 +209,10 @@ export const useKeybindingStore = defineStore('keybinding', () => {
   function unsetKeybinding(keybinding: KeybindingImpl) {
     const serializedCombo = keybinding.combo.serialize()
     if (!(serializedCombo in keybindingByKeyCombo.value)) {
-      throw new Error(`Keybinding on ${keybinding.combo} does not exist`)
+      console.warn(
+        `Trying to unset non-exist keybinding: ${JSON.stringify(keybinding)}`
+      )
+      return
     }
 
     if (userKeybindings.value[serializedCombo]?.equals(keybinding)) {
@@ -231,7 +225,7 @@ export const useKeybindingStore = defineStore('keybinding', () => {
       return
     }
 
-    throw new Error(`NOT_REACHED`)
+    throw new Error(`Unknown keybinding: ${JSON.stringify(keybinding)}`)
   }
 
   /**

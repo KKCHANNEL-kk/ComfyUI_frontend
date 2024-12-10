@@ -10,15 +10,7 @@ import _ from 'lodash'
 import * as jsondiffpatch from 'jsondiffpatch'
 import log from 'loglevel'
 
-function clone(obj: any) {
-  try {
-    if (typeof structuredClone !== 'undefined') {
-      return structuredClone(obj)
-    }
-  } catch (error) {
-    // structuredClone is stricter than using JSON.parse/stringify so fallback to that
-  }
-
+function clone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
@@ -69,7 +61,7 @@ export class ChangeTracker {
     if (this.restoringState) return
 
     logger.debug('Reset State')
-    this.activeState = state ?? this.activeState
+    if (state) this.activeState = clone(state)
     this.initialState = clone(this.activeState)
   }
 
@@ -91,6 +83,8 @@ export class ChangeTracker {
   }
 
   updateModified() {
+    api.dispatchCustomEvent('graphChanged', this.activeState)
+
     // Get the workflow from the store as ChangeTracker is raw object, i.e.
     // `this.workflow` is not reactive.
     const workflow = useWorkflowStore().getWorkflowByPath(this.workflow.path)
@@ -99,7 +93,7 @@ export class ChangeTracker {
         this.initialState,
         this.activeState
       )
-      if (workflow.isModified) {
+      if (logger.getLevel() <= logger.levels.DEBUG && workflow.isModified) {
         const diff = ChangeTracker.graphDiff(
           this.initialState,
           this.activeState
@@ -112,9 +106,9 @@ export class ChangeTracker {
   checkState() {
     if (!this.app.graph || this.changeCount) return
     // @ts-expect-error zod types issue. Will be fixed after we enable ts-strict
-    const currentState = this.app.graph.serialize() as ComfyWorkflowJSON
+    const currentState = clone(this.app.graph.serialize()) as ComfyWorkflowJSON
     if (!this.activeState) {
-      this.activeState = clone(currentState)
+      this.activeState = currentState
       return
     }
     if (!ChangeTracker.graphEqual(this.activeState, currentState)) {
@@ -124,11 +118,8 @@ export class ChangeTracker {
       }
       logger.debug('Diff detected. Undo queue length:', this.undoQueue.length)
 
-      this.activeState = clone(currentState)
+      this.activeState = currentState
       this.redoQueue.length = 0
-      api.dispatchEvent(
-        new CustomEvent('graphChanged', { detail: this.activeState })
-      )
       this.updateModified()
     }
   }
@@ -136,7 +127,7 @@ export class ChangeTracker {
   async updateState(source: ComfyWorkflowJSON[], target: ComfyWorkflowJSON[]) {
     const prevState = source.pop()
     if (prevState) {
-      target.push(this.activeState!)
+      target.push(this.activeState)
       this.restoringState = true
       try {
         await this.app.loadGraphData(prevState, false, false, this.workflow, {
@@ -172,11 +163,13 @@ export class ChangeTracker {
   }
 
   async undoRedo(e: KeyboardEvent) {
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'y' || e.key == 'Z') {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const key = e.key.toUpperCase()
+      // Redo: Ctrl + Y, or Ctrl + Shift + Z
+      if ((key === 'Y' && !e.shiftKey) || (key == 'Z' && e.shiftKey)) {
         await this.redo()
         return true
-      } else if (e.key === 'z') {
+      } else if (key === 'Z' && !e.shiftKey) {
         await this.undo()
         return true
       }
@@ -395,8 +388,11 @@ export class ChangeTracker {
         return false
       }
 
-      // Reroutes (schema 0.4)
-      if (!_.isEqual(a.extra?.reroutes, b.extra?.reroutes)) return false
+      // Compare extra properties ignoring ds
+      if (
+        !_.isEqual(_.omit(a.extra ?? {}, ['ds']), _.omit(b.extra ?? {}, ['ds']))
+      )
+        return false
 
       // Compare other properties normally
       for (const key of ['links', 'reroutes', 'groups']) {
@@ -411,7 +407,7 @@ export class ChangeTracker {
     return false
   }
 
-  static graphDiff(a: ComfyWorkflowJSON, b: ComfyWorkflowJSON) {
+  private static graphDiff(a: ComfyWorkflowJSON, b: ComfyWorkflowJSON) {
     function sortGraphNodes(graph: ComfyWorkflowJSON) {
       return {
         links: graph.links,

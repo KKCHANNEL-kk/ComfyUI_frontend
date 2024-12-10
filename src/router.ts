@@ -7,8 +7,11 @@ import {
 } from 'vue-router'
 import LayoutDefault from '@/views/layouts/LayoutDefault.vue'
 import { isElectron } from './utils/envUtil'
+import { useUserStore } from './stores/userStore'
 
-const isFileProtocol = () => window.location.protocol === 'file:'
+const isFileProtocol = window.location.protocol === 'file:'
+const basePath = isElectron() ? '/' : window.location.pathname
+
 const guardElectronAccess = (
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
@@ -22,12 +25,12 @@ const guardElectronAccess = (
 }
 
 const router = createRouter({
-  history: isFileProtocol()
+  history: isFileProtocol
     ? createWebHashHistory()
     : // Base path must be specified to ensure correct relative paths
       // Example: For URL 'http://localhost:7801/ComfyBackendDirect',
       // we need this base path or assets will incorrectly resolve from 'http://localhost:7801/'
-      createWebHistory(window.location.pathname),
+      createWebHistory(basePath),
   routes: [
     {
       path: '/',
@@ -36,7 +39,21 @@ const router = createRouter({
         {
           path: '',
           name: 'GraphView',
-          component: () => import('@/views/GraphView.vue')
+          component: () => import('@/views/GraphView.vue'),
+          beforeEnter: async (to, from, next) => {
+            const userStore = useUserStore()
+            await userStore.initialize()
+            if (userStore.needsLogin) {
+              next('/user-select')
+            } else {
+              next()
+            }
+          }
+        },
+        {
+          path: 'user-select',
+          name: 'UserSelectView',
+          component: () => import('@/views/UserSelectView.vue')
         },
         {
           path: 'server-start',
@@ -54,6 +71,18 @@ const router = createRouter({
           path: 'welcome',
           name: 'WelcomeView',
           component: () => import('@/views/WelcomeView.vue'),
+          beforeEnter: guardElectronAccess
+        },
+        {
+          path: 'not-supported',
+          name: 'NotSupportedView',
+          component: () => import('@/views/NotSupportedView.vue'),
+          beforeEnter: guardElectronAccess
+        },
+        {
+          path: 'download-git',
+          name: 'DownloadGitView',
+          component: () => import('@/views/DownloadGitView.vue'),
           beforeEnter: guardElectronAccess
         }
       ]

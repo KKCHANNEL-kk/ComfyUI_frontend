@@ -1,12 +1,11 @@
 // @ts-strict-ignore
-import { ComfyLogging } from './logging'
 import {
   type ComfyWidgetConstructor,
   ComfyWidgets,
   initWidgets
 } from './widgets'
 import { ComfyUI, $el } from './ui'
-import { api } from './api'
+import { api, type ComfyApi } from './api'
 import { defaultGraph } from './defaultGraph'
 import {
   getPngMetadata,
@@ -16,27 +15,24 @@ import {
   getLatentMetadata
 } from './pnginfo'
 import { createImageHost, calculateImageGrid } from './ui/imagePreview'
-import { DraggableList } from './ui/draggableList'
-import { applyTextReplacements, addStylesheet } from './utils'
 import type { ComfyExtension, MissingNodeType } from '@/types/comfy'
 import {
   type ComfyWorkflowJSON,
   type NodeId,
   validateComfyWorkflow
-} from '../types/comfyWorkflow'
-import { ComfyNodeDef, StatusWsMessageStatus } from '@/types/apiTypes'
+} from '@/types/comfyWorkflow'
+import type { ComfyNodeDef } from '@/types/apiTypes'
 import { adjustColor, ColorAdjustOptions } from '@/utils/colorUtil'
 import { ComfyAppMenu } from './ui/menu/index'
 import { getStorageValue } from './utils'
 import { ComfyWorkflow } from '@/stores/workflowStore'
 import {
-  LGraphGroup,
   LGraphCanvas,
   LGraph,
   LGraphNode,
-  LiteGraph
+  LiteGraph,
+  LGraphEventMode
 } from '@comfyorg/litegraph'
-import { StorageLocation } from '@/types/settingTypes'
 import { ExtensionManager } from '@/types/extensionTypes'
 import {
   ComfyNodeDefImpl,
@@ -65,6 +61,7 @@ import { type IBaseWidget } from '@comfyorg/litegraph/dist/types/widgets'
 import { workflowService } from '@/services/workflowService'
 import { useWidgetStore } from '@/stores/widgetStore'
 import { deserialiseAndCreate } from '@/extensions/core/vintageClipboard'
+import { st } from '@/i18n'
 
 export const ANIM_PREVIEW_WIDGET = '$$comfy_animation_preview'
 
@@ -117,35 +114,25 @@ export class ComfyApp {
   static open_maskeditor = null
   static clipspace_return_node = null
 
-  // Force vite to import utils.ts as part of index.
-  // Force import of DraggableList.
-  static utils = {
-    applyTextReplacements,
-    addStylesheet,
-    DraggableList
-  }
-
   vueAppReady: boolean
+  api: ComfyApi
   ui: ComfyUI
-  logging: ComfyLogging
   extensions: ComfyExtension[]
   extensionManager: ExtensionManager
   _nodeOutputs: Record<string, any>
   nodePreviewImages: Record<string, typeof Image>
   graph: LGraph
-  enableWorkflowViewRestore: any
   canvas: LGraphCanvas
   dragOverNode: LGraphNode | null
   canvasEl: HTMLCanvasElement
   // x, y, scale
   zoom_drag_start: [number, number, number] | null
   lastNodeErrors: any[] | null
-  lastExecutionError: { node_id: number } | null
-  progress: { value: number; max: number } | null
+  /** @type {ExecutionErrorWsMessage} */
+  lastExecutionError: { node_id?: NodeId } | null
+  /** @type {ProgressWsMessage} */
+  progress: { value?: number; max?: number } | null
   configuringGraph: boolean
-  isNewUserSession: boolean
-  storageLocation: StorageLocation
-  multiUserServer: boolean
   ctx: CanvasRenderingContext2D
   bodyTop: HTMLElement
   bodyLeft: HTMLElement
@@ -181,10 +168,25 @@ export class ComfyApp {
     return ComfyWidgets
   }
 
+  /**
+   * @deprecated storageLocation is always 'server' since
+   * https://github.com/comfyanonymous/ComfyUI/commit/53c8a99e6c00b5e20425100f6680cd9ea2652218
+   */
+  get storageLocation() {
+    return 'server'
+  }
+
+  /**
+   * @deprecated storage migration is no longer needed.
+   */
+  get isNewUserSession() {
+    return false
+  }
+
   constructor() {
     this.vueAppReady = false
     this.ui = new ComfyUI(this)
-    this.logging = new ComfyLogging(this)
+    this.api = api
     this.bodyTop = $el('div.comfyui-body-top', { parent: document.body })
     this.bodyLeft = $el('div.comfyui-body-left', { parent: document.body })
     this.bodyRight = $el('div.comfyui-body-right', { parent: document.body })
@@ -452,7 +454,7 @@ export class ComfyApp {
       const workflow = serialize.apply(this, arguments)
 
       // Store the drag & scale info in the serialized workflow if the setting is enabled
-      if (self.enableWorkflowViewRestore.value) {
+      if (useSettingStore().get('Comfy.EnableWorkflowViewRestore')) {
         if (!workflow.extra) {
           workflow.extra = {}
         }
@@ -467,13 +469,6 @@ export class ComfyApp {
 
       return workflow
     }
-    this.enableWorkflowViewRestore = this.ui.settings.addSetting({
-      id: 'Comfy.EnableWorkflowViewRestore',
-      category: ['Comfy', 'Workflow', 'EnableWorkflowViewRestore'],
-      name: 'Save and restore canvas position and zoom level in workflows',
-      type: 'boolean',
-      defaultValue: true
-    })
   }
 
   /**
@@ -594,8 +589,9 @@ export class ComfyApp {
       options.push({
         content: 'Bypass',
         callback: (obj) => {
-          if (this.mode === 4) this.mode = 0
-          else this.mode = 4
+          if (this.mode === LGraphEventMode.BYPASS)
+            this.mode = LGraphEventMode.ALWAYS
+          else this.mode = LGraphEventMode.BYPASS
           this.graph.change()
         }
       })
@@ -1089,7 +1085,6 @@ export class ComfyApp {
       'dragover',
       (e) => {
         this.canvas.adjustMouseEvent(e)
-        // @ts-expect-error: canvasX and canvasY are added by adjustMouseEvent in litegraph
         const node = this.graph.getNodeOnPos(e.canvasX, e.canvasY)
         if (node) {
           // @ts-expect-error This is not a standard event. TODO fix it.
@@ -1487,15 +1482,12 @@ export class ComfyApp {
       const old_color = node.color
       const old_bgcolor = node.bgcolor
 
-      if (node.mode === 2) {
-        // never
+      if (node.mode === LGraphEventMode.NEVER) {
         this.editor_alpha = 0.4
       }
 
-      // ComfyUI's custom node mode enum value 4 => bypass/never.
       let bgColor: string
-      if (node.mode === 4) {
-        // never
+      if (node.mode === LGraphEventMode.BYPASS) {
         bgColor = app.bypassBgColor
         this.editor_alpha = 0.2
       } else {
@@ -1532,12 +1524,9 @@ export class ComfyApp {
    * Handles updates from the API socket
    */
   #addApiUpdateHandlers() {
-    api.addEventListener(
-      'status',
-      ({ detail }: CustomEvent<StatusWsMessageStatus>) => {
-        this.ui.setStatus(detail)
-      }
-    )
+    api.addEventListener('status', ({ detail }) => {
+      this.ui.setStatus(detail)
+    })
 
     api.addEventListener('progress', ({ detail }) => {
       this.progress = detail
@@ -1614,7 +1603,7 @@ export class ComfyApp {
     app.canvas.getWidgetLinkType = function (widget, node) {
       const nodeDefStore = useNodeDefStore()
       const nodeDef = nodeDefStore.nodeDefsByName[node.type]
-      const input = nodeDef.input.getInput(widget.name)
+      const input = nodeDef.inputs.getInput(widget.name)
       return input?.type
     }
 
@@ -1683,7 +1672,6 @@ export class ComfyApp {
     useExtensionStore().loadDisabledExtensionNames()
 
     const extensions = await api.getExtensions()
-    this.logging.addEntry('Comfy.App', 'debug', { Extensions: extensions })
 
     // Need to load core extensions first as some custom extensions
     // may depend on them.
@@ -1701,92 +1689,6 @@ export class ComfyApp {
     )
   }
 
-  async #migrateSettings() {
-    this.isNewUserSession = true
-    // Store all current settings
-    const settings = Object.keys(this.ui.settings).reduce((p, n) => {
-      const v = localStorage[`Comfy.Settings.${n}`]
-      if (v) {
-        try {
-          p[n] = JSON.parse(v)
-        } catch (error) {}
-      }
-      return p
-    }, {})
-
-    await api.storeSettings(settings)
-  }
-
-  async #setUser() {
-    const userConfig = await api.getUserConfig()
-    this.storageLocation = userConfig.storage
-    if (typeof userConfig.migrated == 'boolean') {
-      // Single user mode migrated true/false for if the default user is created
-      if (!userConfig.migrated && this.storageLocation === 'server') {
-        // Default user not created yet
-        await this.#migrateSettings()
-      }
-      return
-    }
-
-    this.multiUserServer = true
-    let user = localStorage['Comfy.userId']
-    const users = userConfig.users ?? {}
-    if (!user || !users[user]) {
-      // Lift spinner / BlockUI for user selection.
-      if (this.vueAppReady) useWorkspaceStore().spinner = false
-
-      // This will rarely be hit so move the loading to on demand
-      const { UserSelectionScreen } = await import('./ui/userSelection')
-
-      this.ui.menuContainer.style.display = 'none'
-      const { userId, username, created } =
-        await new UserSelectionScreen().show(users, user)
-      this.ui.menuContainer.style.display = ''
-
-      user = userId
-      localStorage['Comfy.userName'] = username
-      localStorage['Comfy.userId'] = user
-
-      if (created) {
-        api.user = user
-        await this.#migrateSettings()
-      }
-    }
-
-    api.user = user
-
-    this.ui.settings.addSetting({
-      id: 'Comfy.SwitchUser',
-      name: 'Switch User',
-      type: (name) => {
-        let currentUser = localStorage['Comfy.userName']
-        if (currentUser) {
-          currentUser = ` (${currentUser})`
-        }
-        return $el('tr', [
-          $el('td', [
-            $el('label', {
-              textContent: name
-            })
-          ]),
-          $el('td', [
-            $el('button', {
-              textContent: name + (currentUser ?? ''),
-              onclick: () => {
-                delete localStorage['Comfy.userId']
-                delete localStorage['Comfy.userName']
-                window.location.reload()
-              }
-            })
-          ])
-        ])
-      },
-      // TODO: Is that the correct default value?
-      defaultValue: undefined
-    })
-  }
-
   /**
    * Set up the app on the page
    */
@@ -1794,7 +1696,6 @@ export class ComfyApp {
     this.canvasEl = canvasEl
     // Show menu container for GraphView.
     this.ui.menuContainer.style.display = 'block'
-    await this.#setUser()
 
     this.resizeCanvas()
 
@@ -1865,15 +1766,6 @@ export class ComfyApp {
       await this.loadGraphData()
     }
 
-    // Save current workflow automatically
-    setInterval(() => {
-      const workflow = JSON.stringify(this.serializeGraph())
-      localStorage.setItem('workflow', workflow)
-      if (api.clientId) {
-        sessionStorage.setItem(`workflow:${api.clientId}`, workflow)
-      }
-    }, 1000)
-
     this.#addDrawNodeHandler()
     this.#addDrawGroupsHandler()
     this.#addDropHandler()
@@ -1930,14 +1822,42 @@ export class ComfyApp {
     nodeDefStore.updateNodeDefs(nodeDefArray)
   }
 
+  #translateNodeDefs(defs: Record<string, ComfyNodeDef>) {
+    return Object.fromEntries(
+      Object.entries(defs).map(([name, def]) => [
+        name,
+        {
+          ...def,
+          display_name: st(
+            `nodeDefs.${name}.display_name`,
+            def.display_name ?? def.name
+          ),
+          description: def.description
+            ? st(`nodeDefs.${name}.description`, def.description)
+            : undefined,
+          category: def.category
+            .split('/')
+            .map((category) => st(`nodeCategories.${category}`, category))
+            .join('/')
+        }
+      ])
+    )
+  }
+
+  async #getNodeDefs() {
+    return this.#translateNodeDefs(
+      await api.getNodeDefs({
+        validate: useSettingStore().get('Comfy.Validation.NodeDefs')
+      })
+    )
+  }
+
   /**
    * Registers nodes with the graph
    */
   async registerNodes() {
     // Load node definitions from the backend
-    const defs = await api.getNodeDefs({
-      validate: useSettingStore().get('Comfy.Validation.NodeDefs')
-    })
+    const defs = await this.#getNodeDefs()
     await this.registerNodesFromDefs(defs)
     await this.#invokeExtensionsAsync('registerCustomNodes')
     if (this.vueAppReady) {
@@ -2156,10 +2076,6 @@ export class ComfyApp {
     if (useSettingStore().get('Comfy.Workflow.ShowMissingNodesWarning')) {
       showLoadWorkflowWarning({ missingNodeTypes })
     }
-
-    this.logging.addEntry('Comfy.App', 'warn', {
-      MissingNodes: missingNodeTypes
-    })
   }
 
   #showMissingModelsError(missingModels, paths) {
@@ -2169,10 +2085,6 @@ export class ComfyApp {
         paths
       })
     }
-
-    this.logging.addEntry('Comfy.App', 'warn', {
-      MissingModels: missingModels
-    })
   }
 
   async loadGraphData(
@@ -2257,7 +2169,7 @@ export class ComfyApp {
       this.graph.configure(graphData)
       if (
         restore_view &&
-        this.enableWorkflowViewRestore.value &&
+        useSettingStore().get('Comfy.EnableWorkflowViewRestore') &&
         graphData.extra?.ds
       ) {
         // @ts-expect-error
@@ -2423,7 +2335,9 @@ export class ComfyApp {
     const output = {}
     // Process nodes in order of execution
     for (const outerNode of graph.computeExecutionOrder(false)) {
-      const skipNode = outerNode.mode === 2 || outerNode.mode === 4
+      const skipNode =
+        outerNode.mode === LGraphEventMode.NEVER ||
+        outerNode.mode === LGraphEventMode.BYPASS
       const innerNodes =
         !skipNode && outerNode.getInnerNodes
           ? outerNode.getInnerNodes()
@@ -2433,7 +2347,10 @@ export class ComfyApp {
           continue
         }
 
-        if (node.mode === 2 || node.mode === 4) {
+        if (
+          node.mode === LGraphEventMode.NEVER ||
+          node.mode === LGraphEventMode.BYPASS
+        ) {
           // Don't serialize muted nodes
           continue
         }
@@ -2458,7 +2375,10 @@ export class ComfyApp {
           let parent = node.getInputNode(i)
           if (parent) {
             let link = node.getInputLink(i)
-            while (parent.mode === 4 || parent.isVirtualNode) {
+            while (
+              parent.mode === LGraphEventMode.BYPASS ||
+              parent.isVirtualNode
+            ) {
               let found = false
               if (parent.isVirtualNode) {
                 link = parent.getInputLink(link.origin_slot)
@@ -2468,7 +2388,7 @@ export class ComfyApp {
                     found = true
                   }
                 }
-              } else if (link && parent.mode === 4) {
+              } else if (link && parent.mode === LGraphEventMode.BYPASS) {
                 let all_inputs = [link.origin_slot]
                 if (parent.inputs) {
                   all_inputs = all_inputs.concat(Object.keys(parent.inputs))
@@ -2507,16 +2427,14 @@ export class ComfyApp {
           }
         }
 
-        let node_data = {
+        const node_data = {
           inputs,
           class_type: node.comfyClass
         }
 
-        if (this.ui.settings.getSettingValue('Comfy.DevMode')) {
-          // Ignored by the backend.
-          node_data['_meta'] = {
-            title: node.title
-          }
+        // Ignored by the backend.
+        node_data['_meta'] = {
+          title: node.title
         }
 
         output[String(node.id)] = node_data
@@ -2634,9 +2552,7 @@ export class ComfyApp {
     } finally {
       this.#processingQueue = false
     }
-    api.dispatchEvent(
-      new CustomEvent('promptQueued', { detail: { number, batchCount } })
-    )
+    api.dispatchCustomEvent('promptQueued', { number, batchCount })
     return !this.lastNodeErrors
   }
 
@@ -2882,10 +2798,7 @@ export class ComfyApp {
       useToastStore().add(requestToastMessage)
     }
 
-    const defs = await api.getNodeDefs({
-      validate: useSettingStore().get('Comfy.Validation.NodeDefs')
-    })
-
+    const defs = await this.#getNodeDefs()
     for (const nodeId in defs) {
       this.registerNodeDef(nodeId, defs[nodeId])
     }

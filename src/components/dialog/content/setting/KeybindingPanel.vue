@@ -1,5 +1,12 @@
 <template>
-  <div class="keybinding-panel">
+  <PanelTemplate value="Keybinding" class="keybinding-panel">
+    <template #header>
+      <SearchBox
+        v-model="filters['global'].value"
+        :placeholder="$t('g.searchKeybindings') + '...'"
+      />
+    </template>
+
     <DataTable
       :value="commandsData"
       v-model:selection="selectedCommandData"
@@ -11,12 +18,6 @@
         header: 'px-0'
       }"
     >
-      <template #header>
-        <SearchBox
-          v-model="filters['global'].value"
-          :placeholder="$t('searchKeybindings') + '...'"
-        />
-      </template>
       <Column field="actions" header="">
         <template #body="slotProps">
           <div class="actions invisible flex flex-row">
@@ -101,15 +102,15 @@
     </Dialog>
     <Button
       class="mt-4"
-      :label="$t('reset')"
-      v-tooltip="$t('resetKeybindingsTooltip')"
+      :label="$t('g.reset')"
+      v-tooltip="$t('g.resetKeybindingsTooltip')"
       icon="pi pi-trash"
       severity="danger"
       fluid
       text
       @click="resetKeybindings"
     />
-  </div>
+  </PanelTemplate>
 </template>
 
 <script setup lang="ts">
@@ -127,6 +128,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import PanelTemplate from './PanelTemplate.vue'
 import KeyComboDisplay from './keybinding/KeyComboDisplay.vue'
 import SearchBox from '@/components/common/SearchBox.vue'
 import { useToast } from 'primevue/usetoast'

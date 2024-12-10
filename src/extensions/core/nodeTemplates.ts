@@ -6,6 +6,8 @@ import { GroupNodeConfig, GroupNodeHandler } from './groupNode'
 import { LGraphCanvas } from '@comfyorg/litegraph'
 import { useToastStore } from '@/stores/toastStore'
 import { deserialiseAndCreate } from '@/extensions/core/vintageClipboard'
+import { showPromptDialog } from '@/services/dialogService'
+import { t } from '@/i18n'
 
 // Adds the ability to save and add multiple nodes as a template
 // To save:
@@ -85,46 +87,24 @@ class ManageTemplates extends ComfyDialog {
 
   async load() {
     let templates = []
-    if (app.storageLocation === 'server') {
-      if (app.isNewUserSession) {
-        // New user so migrate existing templates
-        const json = localStorage.getItem(id)
-        if (json) {
-          templates = JSON.parse(json)
-        }
-        await api.storeUserData(file, json, { stringify: false })
-      } else {
-        const res = await api.getUserData(file)
-        if (res.status === 200) {
-          try {
-            templates = await res.json()
-          } catch (error) {}
-        } else if (res.status !== 404) {
-          console.error(res.status + ' ' + res.statusText)
-        }
-      }
-    } else {
-      const json = localStorage.getItem(id)
-      if (json) {
-        templates = JSON.parse(json)
-      }
+    const res = await api.getUserData(file)
+    if (res.status === 200) {
+      try {
+        templates = await res.json()
+      } catch (error) {}
+    } else if (res.status !== 404) {
+      console.error(res.status + ' ' + res.statusText)
     }
-
     return templates ?? []
   }
 
   async store() {
-    if (app.storageLocation === 'server') {
-      const templates = JSON.stringify(this.templates, undefined, 4)
-      localStorage.setItem(id, templates) // Backwards compatibility
-      try {
-        await api.storeUserData(file, templates, { stringify: false })
-      } catch (error) {
-        console.error(error)
-        useToastStore().addAlert(error.message)
-      }
-    } else {
-      localStorage.setItem(id, JSON.stringify(this.templates))
+    const templates = JSON.stringify(this.templates, undefined, 4)
+    try {
+      await api.storeUserData(file, templates, { stringify: false })
+    } catch (error) {
+      console.error(error)
+      useToastStore().addAlert(error.message)
     }
   }
 
@@ -370,8 +350,12 @@ app.registerExtension({
       options.push({
         content: `Save Selected as Template`,
         disabled: !Object.keys(app.canvas.selected_nodes || {}).length,
-        callback: () => {
-          const name = prompt('Enter name')
+        callback: async () => {
+          const name = await showPromptDialog({
+            title: t('nodeTemplates.saveAsTemplate'),
+            message: t('nodeTemplates.enterName'),
+            defaultValue: ''
+          })
           if (!name?.trim()) return
 
           clipboardAction(() => {

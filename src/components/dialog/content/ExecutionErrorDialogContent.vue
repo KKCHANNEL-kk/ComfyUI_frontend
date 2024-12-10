@@ -7,7 +7,7 @@
   <div class="comfy-error-report">
     <Button
       v-show="!reportOpen"
-      :label="$t('showReport')"
+      :label="$t('g.showReport')"
       @click="showReport"
       text
     />
@@ -20,6 +20,7 @@
     </template>
 
     <div class="action-container">
+      <ReportIssueButton v-if="showSendError" :error="props.error" />
       <FindIssueButton
         :errorMessage="props.error.exception_message"
         :repoOwner="repoOwner"
@@ -27,7 +28,7 @@
       />
       <Button
         v-if="reportOpen"
-        :label="$t('copyToClipboard')"
+        :label="$t('g.copyToClipboard')"
         icon="pi pi-copy"
         @click="copyReportToClipboard"
       />
@@ -37,16 +38,18 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useClipboard } from '@vueuse/core'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Divider from 'primevue/divider'
 import ScrollPanel from 'primevue/scrollpanel'
 import NoResultsPlaceholder from '@/components/common/NoResultsPlaceholder.vue'
 import FindIssueButton from '@/components/dialog/content/error/FindIssueButton.vue'
+import ReportIssueButton from '@/components/dialog/content/error/ReportIssueButton.vue'
 import type { ExecutionErrorWsMessage, SystemStats } from '@/types/apiTypes'
 import { api } from '@/scripts/api'
 import { app } from '@/scripts/app'
+import { isElectron } from '@/utils/envUtil'
+import { useCopyToClipboard } from '@/hooks/clipboardHooks'
 
 const props = defineProps<{
   error: ExecutionErrorWsMessage
@@ -59,9 +62,9 @@ const reportOpen = ref(false)
 const showReport = () => {
   reportOpen.value = true
 }
+const showSendError = isElectron()
 
 const toast = useToast()
-const { copy, isSupported } = useClipboard()
 
 onMounted(async () => {
   try {
@@ -136,30 +139,9 @@ ${workflowText}
 `
 }
 
+const { copyToClipboard } = useCopyToClipboard()
 const copyReportToClipboard = async () => {
-  if (isSupported) {
-    try {
-      await copy(reportContent.value)
-      toast.add({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Report copied to clipboard',
-        life: 3000
-      })
-    } catch (err) {
-      toast.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to copy report'
-      })
-    }
-  } else {
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'Clipboard API not supported in your browser'
-    })
-  }
+  await copyToClipboard(reportContent.value)
 }
 
 const openNewGithubIssue = async () => {

@@ -1,8 +1,7 @@
 import { downloadBlob } from '@/scripts/utils'
 import { useSettingStore } from '@/stores/settingStore'
-import { ComfyAsyncDialog } from '@/scripts/ui/components/asyncDialog'
 import { useWorkflowStore, ComfyWorkflow } from '@/stores/workflowStore'
-import { showPromptDialog } from './dialogService'
+import { showConfirmationDialog, showPromptDialog } from './dialogService'
 import { app } from '@/scripts/app'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { LGraphCanvas } from '@comfyorg/litegraph'
@@ -10,6 +9,8 @@ import { toRaw } from 'vue'
 import { ComfyWorkflowJSON } from '@/types/comfyWorkflow'
 import { blankGraph, defaultGraph } from '@/scripts/defaultGraph'
 import { appendJsonExt } from '@/utils/formatUtil'
+import { t } from '@/i18n'
+import { useToastStore } from '@/stores/toastStore'
 
 async function getFilename(defaultName: string): Promise<string | null> {
   if (useSettingStore().get('Comfy.PromptFilename')) {
@@ -63,17 +64,37 @@ export const workflowService = {
 
     const newPath = workflow.directory + '/' + appendJsonExt(newFilename)
     const newKey = newPath.substring(ComfyWorkflow.basePath.length)
+    const workflowStore = useWorkflowStore()
+    const existingWorkflow = workflowStore.getWorkflowByPath(newPath)
+
+    if (existingWorkflow && !existingWorkflow.isTemporary) {
+      const res = await showConfirmationDialog({
+        title: t('sideToolbar.workflowTab.confirmOverwriteTitle'),
+        type: 'overwrite',
+        message: t('sideToolbar.workflowTab.confirmOverwrite'),
+        itemList: [newPath]
+      })
+
+      if (res !== true) return
+
+      if (existingWorkflow.path === workflow.path) {
+        await this.saveWorkflow(workflow)
+        return
+      }
+      const deleted = await this.deleteWorkflow(existingWorkflow, true)
+      if (!deleted) return
+    }
 
     if (workflow.isTemporary) {
       await this.renameWorkflow(workflow, newPath)
-      await useWorkflowStore().saveWorkflow(workflow)
+      await workflowStore.saveWorkflow(workflow)
     } else {
-      const tempWorkflow = useWorkflowStore().createTemporary(
+      const tempWorkflow = workflowStore.createTemporary(
         newKey,
         workflow.activeState as ComfyWorkflowJSON
       )
       await this.openWorkflow(tempWorkflow)
-      await useWorkflowStore().saveWorkflow(tempWorkflow)
+      await workflowStore.saveWorkflow(tempWorkflow)
     }
   },
 
@@ -103,8 +124,27 @@ export const workflowService = {
     await app.loadGraphData(blankGraph)
   },
 
-  async openWorkflow(workflow: ComfyWorkflow) {
-    if (useWorkflowStore().isActive(workflow)) return
+  /**
+   * Reload the current workflow
+   * This is used to refresh the node definitions update, e.g. when the locale changes.
+   */
+  async reloadCurrentWorkflow() {
+    const workflow = useWorkflowStore().activeWorkflow
+    if (workflow) {
+      await this.openWorkflow(workflow, { force: true })
+    }
+  },
+
+  /**
+   * Open a workflow in the current workspace
+   * @param workflow The workflow to open
+   * @param options The options for opening the workflow
+   */
+  async openWorkflow(
+    workflow: ComfyWorkflow,
+    options: { force: boolean } = { force: false }
+  ) {
+    if (useWorkflowStore().isActive(workflow) && !options.force) return
 
     const loadFromRemote = !workflow.isLoaded
     if (loadFromRemote) {
@@ -131,22 +171,23 @@ export const workflowService = {
   async closeWorkflow(
     workflow: ComfyWorkflow,
     options: { warnIfUnsaved: boolean } = { warnIfUnsaved: true }
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!workflow.isLoaded) {
-      return
+      return true
     }
 
     if (workflow.isModified && options.warnIfUnsaved) {
-      const res = (await ComfyAsyncDialog.prompt({
-        title: 'Save Changes?',
-        message: `Do you want to save changes to "${workflow.path}" before closing?`,
-        actions: ['Yes', 'No', 'Cancel']
-      })) as 'Yes' | 'No' | 'Cancel'
+      const confirmed = await showConfirmationDialog({
+        title: t('sideToolbar.workflowTab.dirtyCloseTitle'),
+        type: 'dirtyClose',
+        message: t('sideToolbar.workflowTab.dirtyClose'),
+        itemList: [workflow.path]
+      })
+      // Cancel
+      if (confirmed === null) return false
 
-      if (res === 'Yes') {
+      if (confirmed === true) {
         await this.saveWorkflow(workflow)
-      } else if (res === 'Cancel') {
-        return
       }
     }
 
@@ -161,18 +202,51 @@ export const workflowService = {
     }
 
     await workflowStore.closeWorkflow(workflow)
+    return true
   },
 
   async renameWorkflow(workflow: ComfyWorkflow, newPath: string) {
     await useWorkflowStore().renameWorkflow(workflow, newPath)
   },
 
-  async deleteWorkflow(workflow: ComfyWorkflow) {
+  /**
+   * Delete a workflow
+   * @param workflow The workflow to delete
+   * @returns `true` if the workflow was deleted, `false` if the user cancelled
+   */
+  async deleteWorkflow(
+    workflow: ComfyWorkflow,
+    silent = false
+  ): Promise<boolean> {
+    const bypassConfirm = !useSettingStore().get('Comfy.Workflow.ConfirmDelete')
+    let confirmed: boolean | null = bypassConfirm || silent
+
+    if (!confirmed) {
+      confirmed = await showConfirmationDialog({
+        title: t('sideToolbar.workflowTab.confirmDeleteTitle'),
+        type: 'delete',
+        message: t('sideToolbar.workflowTab.confirmDelete'),
+        itemList: [workflow.path]
+      })
+      if (!confirmed) return false
+    }
+
     const workflowStore = useWorkflowStore()
     if (workflowStore.isOpen(workflow)) {
-      await this.closeWorkflow(workflow)
+      const closed = await this.closeWorkflow(workflow, {
+        warnIfUnsaved: !confirmed
+      })
+      if (!closed) return false
     }
     await workflowStore.deleteWorkflow(workflow)
+    if (!silent) {
+      useToastStore().add({
+        severity: 'info',
+        summary: t('sideToolbar.workflowTab.deleted'),
+        life: 1000
+      })
+    }
+    return true
   },
 
   /**
@@ -273,5 +347,13 @@ export const workflowService = {
     if (previousWorkflow) {
       await this.openWorkflow(previousWorkflow)
     }
+  },
+
+  /**
+   * Takes an existing workflow and duplicates it with a new name
+   */
+  async duplicateWorkflow(workflow: ComfyWorkflow) {
+    const state = JSON.parse(JSON.stringify(workflow.activeState))
+    await app.loadGraphData(state, true, true, workflow.filename)
   }
 }

@@ -17,7 +17,10 @@ import {
 import { Topbar } from './components/Topbar'
 import { NodeReference } from './utils/litegraphUtils'
 import type { Position, Size } from './types'
+import type { useWorkspaceStore } from '../../src/stores/workspaceStore'
 import { SettingDialog } from './components/SettingDialog'
+
+type WorkspaceStore = ReturnType<typeof useWorkspaceStore>
 
 class ComfyMenu {
   public readonly sideToolbar: Locator
@@ -72,6 +75,28 @@ type FolderStructure = {
   [key: string]: FolderStructure | string
 }
 
+type KeysOfType<T, Match> = {
+  [K in keyof T]: T[K] extends Match ? K : never
+}[keyof T]
+
+class ConfirmDialog {
+  public readonly delete: Locator
+  public readonly overwrite: Locator
+  public readonly reject: Locator
+
+  constructor(public readonly page: Page) {
+    this.delete = page.locator('button.p-button[aria-label="Delete"]')
+    this.overwrite = page.locator('button.p-button[aria-label="Overwrite"]')
+    this.reject = page.locator('button.p-button[aria-label="Cancel"]')
+  }
+
+  async click(locator: KeysOfType<ConfirmDialog, Locator>) {
+    const loc = this[locator]
+    await expect(loc).toBeVisible()
+    await loc.click()
+  }
+}
+
 export class ComfyPage {
   public readonly url: string
   // All canvas position operations are based on default view of canvas.
@@ -91,6 +116,7 @@ export class ComfyPage {
   public readonly actionbar: ComfyActionbar
   public readonly templates: ComfyTemplates
   public readonly settingDialog: SettingDialog
+  public readonly confirmDialog: ConfirmDialog
 
   /** Worker index to test user ID */
   public readonly userIds: string[] = []
@@ -115,6 +141,7 @@ export class ComfyPage {
     this.actionbar = new ComfyActionbar(page)
     this.templates = new ComfyTemplates(page)
     this.settingDialog = new SettingDialog(page)
+    this.confirmDialog = new ConfirmDialog(page)
   }
 
   convertLeafToContent(structure: FolderStructure): FolderStructure {
@@ -204,13 +231,15 @@ export class ComfyPage {
     }
   }
 
-  async setup() {
+  async setup({ clearStorage = true }: { clearStorage?: boolean } = {}) {
     await this.goto()
-    await this.page.evaluate((id) => {
-      localStorage.clear()
-      sessionStorage.clear()
-      localStorage.setItem('Comfy.userId', id)
-    }, this.id)
+    if (clearStorage) {
+      await this.page.evaluate((id) => {
+        localStorage.clear()
+        sessionStorage.clear()
+        localStorage.setItem('Comfy.userId', id)
+      }, this.id)
+    }
     await this.goto()
 
     // Unify font for consistent screenshots.
@@ -314,9 +343,9 @@ export class ComfyPage {
     }, settingId)
   }
 
-  async reload() {
+  async reload({ clearStorage = true }: { clearStorage?: boolean } = {}) {
     await this.page.reload({ timeout: 15000 })
-    await this.setup()
+    await this.setup({ clearStorage })
   }
 
   async goto() {
@@ -485,6 +514,10 @@ export class ComfyPage {
     return { x: 427, y: 98 }
   }
 
+  get promptDialogInput() {
+    return this.page.locator('.p-dialog-content input[type="text"]')
+  }
+
   async disconnectEdge() {
     await this.dragAndDrop(this.clipTextEncodeNode1InputSlot, this.emptySpace)
   }
@@ -524,9 +557,6 @@ export class ComfyPage {
     safeSpot = safeSpot || { x: 10, y: 10 }
     await this.page.mouse.move(safeSpot.x, safeSpot.y)
     await this.page.mouse.down()
-    // TEMPORARY HACK: Multiple pans open the search menu, so cheat and keep it closed.
-    // TODO: Fix that (double-click at not-the-same-coordinations should not open the menu)
-    await this.page.keyboard.press('Escape')
     await this.page.mouse.move(offset.x + safeSpot.x, offset.y + safeSpot.y)
     await this.page.mouse.up()
     await this.nextFrame()
@@ -552,6 +582,11 @@ export class ComfyPage {
 
   async rightClickCanvas() {
     await this.page.mouse.click(10, 10, { button: 'right' })
+    await this.nextFrame()
+  }
+
+  async clickContextMenuItem(name: string): Promise<void> {
+    await this.page.getByRole('menuitem', { name }).click()
     await this.nextFrame()
   }
 
@@ -733,15 +768,29 @@ export class ComfyPage {
     )
   }
 
+  async clickDialogButton(prompt: string, buttonText: string = 'Yes') {
+    const modal = this.page.locator(
+      `.comfy-modal-content:has-text("${prompt}")`
+    )
+    await expect(modal).toBeVisible()
+    await modal
+      .locator('.comfyui-button', {
+        hasText: buttonText
+      })
+      .click()
+    await expect(modal).toBeHidden()
+  }
+
   async convertAllNodesToGroupNode(groupNodeName: string) {
-    this.page.on('dialog', async (dialog) => {
-      await dialog.accept(groupNodeName)
-    })
     await this.canvas.press('Control+a')
     const node = await this.getFirstNodeRef()
     await node!.clickContextMenuOption('Convert to Group Node')
+    await this.promptDialogInput.fill(groupNodeName)
+    await this.page.keyboard.press('Enter')
+    await this.promptDialogInput.waitFor({ state: 'hidden' })
     await this.nextFrame()
   }
+
   async convertOffsetToCanvas(pos: [number, number]) {
     return this.page.evaluate((pos) => {
       return window['app'].canvas.ds.convertOffsetToCanvas(pos)
@@ -771,6 +820,26 @@ export class ComfyPage {
   async moveMouseToEmptyArea() {
     await this.page.mouse.move(10, 10)
   }
+  async getUndoQueueSize() {
+    return this.page.evaluate(() => {
+      const workflow = (window['app'].extensionManager as WorkspaceStore)
+        .workflow.activeWorkflow
+      return workflow?.changeTracker.undoQueue.length
+    })
+  }
+  async getRedoQueueSize() {
+    return this.page.evaluate(() => {
+      const workflow = (window['app'].extensionManager as WorkspaceStore)
+        .workflow.activeWorkflow
+      return workflow?.changeTracker.redoQueue.length
+    })
+  }
+  async isCurrentWorkflowModified() {
+    return this.page.evaluate(() => {
+      return (window['app'].extensionManager as WorkspaceStore).workflow
+        .activeWorkflow?.isModified
+    })
+  }
 }
 
 export const comfyPageFixture = base.extend<{ comfyPage: ComfyPage }>({
@@ -782,18 +851,23 @@ export const comfyPageFixture = base.extend<{ comfyPage: ComfyPage }>({
     const userId = await comfyPage.setupUser(username)
     comfyPage.userIds[parallelIndex] = userId
 
-    await comfyPage.setupSettings({
-      'Comfy.UseNewMenu': 'Disabled',
-      // Hide canvas menu/info by default.
-      'Comfy.Graph.CanvasInfo': false,
-      'Comfy.Graph.CanvasMenu': false,
-      // Hide all badges by default.
-      'Comfy.NodeBadge.NodeIdBadgeMode': NodeBadgeMode.None,
-      'Comfy.NodeBadge.NodeSourceBadgeMode': NodeBadgeMode.None,
-      // Disable tooltips by default to avoid flakiness.
-      'Comfy.EnableTooltips': false,
-      'Comfy.userId': userId
-    })
+    try {
+      await comfyPage.setupSettings({
+        'Comfy.UseNewMenu': 'Disabled',
+        // Hide canvas menu/info by default.
+        'Comfy.Graph.CanvasInfo': false,
+        'Comfy.Graph.CanvasMenu': false,
+        // Hide all badges by default.
+        'Comfy.NodeBadge.NodeIdBadgeMode': NodeBadgeMode.None,
+        'Comfy.NodeBadge.NodeSourceBadgeMode': NodeBadgeMode.None,
+        // Disable tooltips by default to avoid flakiness.
+        'Comfy.EnableTooltips': false,
+        'Comfy.userId': userId
+      })
+    } catch (e) {
+      console.error(e)
+    }
+
     await comfyPage.setup()
     await use(comfyPage)
   }

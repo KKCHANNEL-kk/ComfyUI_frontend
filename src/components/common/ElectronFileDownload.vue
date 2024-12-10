@@ -2,6 +2,7 @@
 <template>
   <div class="flex flex-col">
     <div class="flex flex-row items-center gap-2">
+      <i class="pi pi-check text-green-500" v-if="status === 'completed'" />
       <div class="file-info">
         <div class="file-details">
           <span class="file-type" :title="hint">{{ label }}</span>
@@ -14,7 +15,7 @@
       <div class="file-action">
         <Button
           class="file-action-button"
-          :label="$t('download') + ' (' + fileSize + ')'"
+          :label="$t('g.download') + ' (' + fileSize + ')'"
           size="small"
           outlined
           :disabled="props.error"
@@ -28,7 +29,14 @@
       class="flex flex-row items-center gap-2"
       v-if="status === 'in_progress' || status === 'paused'"
     >
-      <ProgressBar class="flex-1" :value="downloadProgress" />
+      <!-- Temporary fix for issue when % only comes into view only if the progress bar is large enough
+           https://comfy-organization.slack.com/archives/C07H3GLKDPF/p1731551013385499     
+      -->
+      <ProgressBar
+        class="flex-1"
+        :value="downloadProgress"
+        :show-value="downloadProgress > 10"
+      />
 
       <Button
         class="file-action-button"
@@ -73,7 +81,6 @@ import ProgressBar from 'primevue/progressbar'
 import { ref, computed } from 'vue'
 import { formatSize } from '@/utils/formatUtil'
 import { useI18n } from 'vue-i18n'
-import { electronAPI } from '@/utils/envUtil'
 import { useElectronDownloadStore } from '@/stores/electronDownloadStore'
 
 const props = defineProps<{
@@ -84,7 +91,6 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const { DownloadManager } = electronAPI()
 const label = computed(() => props.label || props.url.split('/').pop())
 const hint = computed(() => props.hint || props.url)
 const download = useDownload(props.url)

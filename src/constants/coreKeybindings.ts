@@ -59,7 +59,7 @@ export const CORE_KEYBINDINGS: Keybinding[] = [
       key: 's',
       ctrl: true
     },
-    commandId: 'Comfy.ExportWorkflow'
+    commandId: 'Comfy.SaveWorkflow'
   },
   {
     combo: {
@@ -73,13 +73,6 @@ export const CORE_KEYBINDINGS: Keybinding[] = [
       key: 'Backspace'
     },
     commandId: 'Comfy.ClearWorkflow'
-  },
-  {
-    combo: {
-      key: 'd',
-      ctrl: true
-    },
-    commandId: 'Comfy.LoadDefaultWorkflow'
   },
   {
     combo: {
@@ -173,7 +166,7 @@ export const CORE_KEYBINDINGS: Keybinding[] = [
       key: '`',
       ctrl: true
     },
-    commandId: 'Workspace.ToggleBottomPanelTab.integrated-terminal'
+    commandId: 'Workspace.ToggleBottomPanelTab.logs-terminal'
   },
   {
     combo: {

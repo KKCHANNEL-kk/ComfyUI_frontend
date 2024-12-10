@@ -45,6 +45,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#FFF',
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.5)',
         DEFAULT_GROUP_FONT: 24,
 
@@ -64,6 +65,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#fff',
         'bg-color': '#202020',
         'comfy-menu-bg': '#353535',
+        'comfy-menu-secondary-bg': '#303030',
         'comfy-input-bg': '#222',
         'input-text': '#ddd',
         'descrip-text': '#999',
@@ -75,7 +77,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#4e4e4e',
         'content-fg': '#fff',
         'content-hover-bg': '#222',
-        'content-hover-fg': '#fff'
+        'content-hover-fg': '#fff',
+        'bar-shadow': 'rgba(16, 16, 16, 0.5) 0 0 0.5rem'
       }
     }
   },
@@ -111,6 +114,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#000',
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.1)',
         DEFAULT_GROUP_FONT: 24,
 
@@ -130,6 +134,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#222',
         'bg-color': '#DDD',
         'comfy-menu-bg': '#F5F5F5',
+        'comfy-menu-secondary-bg': '#D9D9D9',
         'comfy-input-bg': '#C9C9C9',
         'input-text': '#222',
         'descrip-text': '#444',
@@ -141,7 +146,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#e0e0e0',
         'content-fg': '#222',
         'content-hover-bg': '#adadad',
-        'content-hover-fg': '#222'
+        'content-hover-fg': '#222',
+        'bar-shadow': 'rgba(16, 16, 16, 0.25) 0 0 0.5rem'
       }
     }
   },
@@ -175,6 +181,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#fdf6e3', // Base3
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.5)',
         DEFAULT_GROUP_FONT: 24,
 
@@ -191,6 +198,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#fdf6e3', // Base3
         'bg-color': '#002b36', // Base03
         'comfy-menu-bg': '#073642', // Base02
+        'comfy-menu-secondary-bg': '#06323D',
         'comfy-input-bg': '#002b36', // Base03
         'input-text': '#93a1a1', // Base1
         'descrip-text': '#586e75', // Base01
@@ -202,7 +210,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#657b83',
         'content-fg': '#fdf6e3',
         'content-hover-bg': '#002b36',
-        'content-hover-fg': '#fdf6e3'
+        'content-hover-fg': '#fdf6e3',
+        'bar-shadow': 'rgba(16, 16, 16, 0.5) 0 0 0.5rem'
       }
     }
   },
@@ -252,6 +261,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#FFF',
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.5)',
         DEFAULT_GROUP_FONT: 22,
         WIDGET_BGCOLOR: '#2b2f38',
@@ -266,6 +276,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#fff',
         'bg-color': '#2b2f38',
         'comfy-menu-bg': '#242730',
+        'comfy-menu-secondary-bg': '#22252E',
         'comfy-input-bg': '#2b2f38',
         'input-text': '#ddd',
         'descrip-text': '#b2b7bd',
@@ -277,7 +288,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#6e7581',
         'content-fg': '#fff',
         'content-hover-bg': '#2b2f38',
-        'content-hover-fg': '#fff'
+        'content-hover-fg': '#fff',
+        'bar-shadow': 'rgba(8, 8, 8, 0.75) 0 0 0.5rem'
       }
     }
   },
@@ -327,6 +339,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#e5eaf0',
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.5)',
         DEFAULT_GROUP_FONT: 24,
         WIDGET_BGCOLOR: '#2e3440',
@@ -341,6 +354,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#e5eaf0',
         'bg-color': '#2e3440',
         'comfy-menu-bg': '#161b22',
+        'comfy-menu-secondary-bg': '#14181F',
         'comfy-input-bg': '#2e3440',
         'input-text': '#bcc2c8',
         'descrip-text': '#999',
@@ -352,7 +366,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#545d70',
         'content-fg': '#e5eaf0',
         'content-hover-bg': '#2e3440',
-        'content-hover-fg': '#e5eaf0'
+        'content-hover-fg': '#e5eaf0',
+        'bar-shadow': 'rgba(0, 0, 0, 0.75) 0 0 0.5rem'
       }
     }
   },
@@ -402,6 +417,7 @@ const colorPalettes: ColorPalettes = {
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#e5eaf0',
         NODE_BYPASS_BGCOLOR: '#FF00FF',
+        NODE_ERROR_COLOUR: '#E00',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0.5)',
         DEFAULT_GROUP_FONT: 24,
         WIDGET_BGCOLOR: '#161b22',
@@ -416,6 +432,7 @@ const colorPalettes: ColorPalettes = {
         'fg-color': '#e5eaf0',
         'bg-color': '#161b22',
         'comfy-menu-bg': '#13171d',
+        'comfy-menu-secondary-bg': '#11141A',
         'comfy-input-bg': '#161b22',
         'input-text': '#bcc2c8',
         'descrip-text': '#999',
@@ -427,7 +444,8 @@ const colorPalettes: ColorPalettes = {
         'content-bg': '#30363d',
         'content-fg': '#e5eaf0',
         'content-hover-bg': '#161b22',
-        'content-hover-fg': '#e5eaf0'
+        'content-hover-fg': '#e5eaf0',
+        'bar-shadow': 'rgba(0, 0, 0, 1) 0 0 0.5rem'
       }
     }
   }
@@ -564,7 +582,7 @@ app.registerExtension({
     }
 
     const getColorPaletteTemplate = async () => {
-      let colorPalette = {
+      const colorPalette: Palette = {
         id: 'my_color_palette_unique_id',
         name: 'My Color Palette',
         colors: {
@@ -577,14 +595,10 @@ app.registerExtension({
       // Copy over missing keys from default color palette
       const defaultColorPalette = colorPalettes[defaultColorPaletteId]
       for (const key in defaultColorPalette.colors.litegraph_base) {
-        if (!colorPalette.colors.litegraph_base[key]) {
-          colorPalette.colors.litegraph_base[key] = ''
-        }
+        colorPalette.colors.litegraph_base[key] ||= ''
       }
       for (const key in defaultColorPalette.colors.comfy_base) {
-        if (!colorPalette.colors.comfy_base[key]) {
-          colorPalette.colors.comfy_base[key] = ''
-        }
+        colorPalette.colors.comfy_base[key] ||= ''
       }
 
       return completeColorPalette(colorPalette)
@@ -710,7 +724,7 @@ app.registerExtension({
           app.bypassBgColor =
             colorPalette.colors.litegraph_base.NODE_BYPASS_BGCOLOR
         }
-        app.canvas.draw(true, true)
+        app.canvas.setDirty(true, true)
       }
     }
 
@@ -733,7 +747,7 @@ app.registerExtension({
 
     app.ui.settings.addSetting({
       id,
-      category: ['Comfy', 'ColorPalette'],
+      category: ['Appearance', 'ColorPalette'],
       name: 'Color Palette',
       type: (name, setter, value) => {
         const options = [

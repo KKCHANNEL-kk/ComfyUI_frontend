@@ -19,7 +19,10 @@ import { useI18n } from 'vue-i18n'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { api } from '@/scripts/api'
 import { StatusWsMessageStatus } from '@/types/apiTypes'
-import { useQueuePendingTaskCountStore } from '@/stores/queueStore'
+import {
+  useQueuePendingTaskCountStore,
+  useQueueStore
+} from '@/stores/queueStore'
 import type { ToastMessageOptions } from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 import { i18n } from '@/i18n'
@@ -31,10 +34,14 @@ import TopMenubar from '@/components/topbar/TopMenubar.vue'
 import { setupAutoQueueHandler } from '@/services/autoQueueService'
 import { useKeybindingStore } from '@/stores/keybindingStore'
 import { useSidebarTabStore } from '@/stores/workspace/sidebarTabStore'
-import { useNodeBookmarkStore } from '@/stores/nodeBookmarkStore'
 import { useNodeDefStore, useNodeFrequencyStore } from '@/stores/nodeDefStore'
 import { useBottomPanelStore } from '@/stores/workspace/bottomPanelStore'
 import { useModelStore } from '@/stores/modelStore'
+import { useServerConfigStore } from '@/stores/serverConfigStore'
+import { SERVER_CONFIG_ITEMS } from '@/constants/serverConfig'
+import { useMenuItemStore } from '@/stores/menuItemStore'
+import { useCommandStore } from '@/stores/commandStore'
+import { useCoreCommands } from '@/hooks/coreCommandHooks'
 
 setupAutoQueueHandler()
 
@@ -78,7 +85,7 @@ watchEffect(() => {
 watchEffect(() => {
   const locale = settingStore.get('Comfy.Locale')
   if (locale) {
-    i18n.global.locale.value = locale as 'en' | 'zh'
+    i18n.global.locale.value = locale as 'en' | 'zh' | 'ru' | 'ja'
   }
 })
 
@@ -92,8 +99,17 @@ watchEffect(() => {
   }
 })
 
+watchEffect(() => {
+  useQueueStore().maxHistoryItems = settingStore.get(
+    'Comfy.Queue.MaxHistoryItems'
+  )
+})
+
 const init = () => {
   settingStore.addSettings(app.ui.settings)
+  const coreCommands = useCoreCommands()
+  useCommandStore().registerCommands(coreCommands)
+  useMenuItemStore().registerCoreMenuCommands()
   useKeybindingStore().loadCoreKeybindings()
   useSidebarTabStore().registerCoreSidebarTabs()
   useBottomPanelStore().registerCoreBottomPanelTabs()
@@ -107,7 +123,7 @@ const onStatus = (e: CustomEvent<StatusWsMessageStatus>) => {
 
 const reconnectingMessage: ToastMessageOptions = {
   severity: 'error',
-  summary: t('reconnecting')
+  summary: t('g.reconnecting')
 }
 
 const onReconnecting = () => {
@@ -119,7 +135,7 @@ const onReconnected = () => {
   toast.remove(reconnectingMessage)
   toast.add({
     severity: 'success',
-    summary: t('reconnected'),
+    summary: t('g.reconnected'),
     life: 2000
   })
 }
@@ -151,11 +167,14 @@ const onGraphReady = () => {
       // Load keybindings.
       useKeybindingStore().loadUserKeybindings()
 
+      // Load server config
+      useServerConfigStore().loadServerConfig(
+        SERVER_CONFIG_ITEMS,
+        settingStore.get('Comfy.Server.ServerConfigValues')
+      )
+
       // Load model folders
       useModelStore().loadModelFolders()
-
-      // Migrate legacy bookmarks
-      useNodeBookmarkStore().migrateLegacyBookmarks()
 
       // Node defs now available after comfyApp.setup.
       // Explicitly initialize nodeSearchService to avoid indexing delay when

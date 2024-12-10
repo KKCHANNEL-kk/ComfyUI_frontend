@@ -33,7 +33,7 @@ import LiteGraphCanvasSplitterOverlay from '@/components/LiteGraphCanvasSplitter
 import NodeSearchboxPopover from '@/components/searchbox/NodeSearchBoxPopover.vue'
 import NodeTooltip from '@/components/graph/NodeTooltip.vue'
 import NodeBadge from '@/components/graph/NodeBadge.vue'
-import { ref, computed, onMounted, watchEffect } from 'vue'
+import { ref, computed, onMounted, watchEffect, watch } from 'vue'
 import { app as comfyApp } from '@/scripts/app'
 import { useSettingStore } from '@/stores/settingStore'
 import { ComfyNodeDefImpl, useNodeDefStore } from '@/stores/nodeDefStore'
@@ -47,7 +47,8 @@ import {
   DragAndScale,
   LGraphCanvas,
   ContextMenu,
-  LGraphBadge
+  LGraphBadge,
+  CanvasPointer
 } from '@comfyorg/litegraph'
 import type { RenderedTreeExplorerNode } from '@/types/treeExplorerTypes'
 import { useCanvasStore } from '@/stores/graphStore'
@@ -61,6 +62,9 @@ import { usePragmaticDroppable } from '@/hooks/dndHooks'
 import { useWorkflowStore } from '@/stores/workflowStore'
 import { setStorageValue } from '@/scripts/utils'
 import { ChangeTracker } from '@/scripts/changeTracker'
+import { api } from '@/scripts/api'
+import { useCommandStore } from '@/stores/commandStore'
+import { workflowService } from '@/services/workflowService'
 
 const emit = defineEmits(['ready'])
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -162,6 +166,34 @@ watchEffect(() => {
 })
 
 watchEffect(() => {
+  const maximumFps = settingStore.get('LiteGraph.Canvas.MaximumFps')
+  const { canvas } = canvasStore
+  if (canvas) canvas.maximumFps = maximumFps
+})
+
+watchEffect(() => {
+  CanvasPointer.doubleClickTime = settingStore.get(
+    'Comfy.Pointer.DoubleClickTime'
+  )
+})
+
+watchEffect(() => {
+  CanvasPointer.bufferTime = settingStore.get('Comfy.Pointer.ClickBufferTime')
+})
+
+watchEffect(() => {
+  CanvasPointer.maxClickDrift = settingStore.get('Comfy.Pointer.ClickDrift')
+})
+
+watchEffect(() => {
+  LiteGraph.CANVAS_GRID_SIZE = settingStore.get('Comfy.SnapToGrid.GridSize')
+})
+
+watchEffect(() => {
+  LiteGraph.alwaysSnapToGrid = settingStore.get('pysssss.SnapToGrid')
+})
+
+watchEffect(() => {
   if (!canvasStore.canvas) return
 
   if (canvasStore.canvas.state.draggingCanvas) {
@@ -178,12 +210,25 @@ watchEffect(() => {
 })
 
 const workflowStore = useWorkflowStore()
+const persistCurrentWorkflow = () => {
+  const workflow = JSON.stringify(comfyApp.serializeGraph())
+  localStorage.setItem('workflow', workflow)
+  if (api.clientId) {
+    sessionStorage.setItem(`workflow:${api.clientId}`, workflow)
+  }
+}
+
 watchEffect(() => {
   if (workflowStore.activeWorkflow) {
     const workflow = workflowStore.activeWorkflow
     setStorageValue('Comfy.PreviousWorkflow', workflow.key)
+    // When the activeWorkflow changes, the graph has already been loaded.
+    // Saving the current state of the graph to the localStorage.
+    persistCurrentWorkflow()
   }
 })
+
+api.addEventListener('graphChanged', persistCurrentWorkflow)
 
 usePragmaticDroppable(() => canvasRef.value, {
   onDrop: (event) => {
@@ -269,6 +314,16 @@ onMounted(async () => {
   window['graph'] = comfyApp.graph
 
   comfyAppReady.value = true
+
+  // Start watching for locale change after the initial value is loaded.
+  watch(
+    () => settingStore.get('Comfy.Locale'),
+    async () => {
+      await useCommandStore().execute('Comfy.RefreshNodeDefinitions')
+      workflowService.reloadCurrentWorkflow()
+    }
+  )
+
   emit('ready')
 })
 </script>

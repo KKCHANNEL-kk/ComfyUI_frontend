@@ -14,6 +14,8 @@ import {
   serialise
 } from '@/extensions/core/vintageClipboard'
 import type { ComfyNodeDef } from '@/types/apiTypes'
+import { showPromptDialog } from '@/services/dialogService'
+import { t } from '@/i18n'
 
 type GroupNodeWorkflowData = {
   external: ComfyLink[]
@@ -63,8 +65,8 @@ class GroupNodeBuilder {
     this.nodes = nodes
   }
 
-  build() {
-    const name = this.getName()
+  async build() {
+    const name = await this.getName()
     if (!name) return
 
     // Sort the nodes so they are in execution order
@@ -77,8 +79,12 @@ class GroupNodeBuilder {
     return { name, nodeData: this.nodeData }
   }
 
-  getName() {
-    const name = prompt('Enter group name')
+  async getName() {
+    const name = await showPromptDialog({
+      title: t('groupNode.create'),
+      message: t('groupNode.enterName'),
+      defaultValue: ''
+    })
     if (!name) return
     const used = Workflow.isInUseGroupNode(name)
     switch (used) {
@@ -1001,7 +1007,7 @@ export class GroupNodeHandler {
         },
         {
           content: 'Manage Group Node',
-          callback: manageGroupNodes
+          callback: () => manageGroupNodes(this.type)
         }
       )
     }
@@ -1102,10 +1108,9 @@ export class GroupNodeHandler {
         const innerNodeIndex = this.innerNodes?.findIndex((n) => n.id == id)
         if (innerNodeIndex > -1) {
           this.node.runningInternalNodeId = innerNodeIndex
-          api.dispatchEvent(
-            new CustomEvent(type, {
-              detail: getEvent(detail, this.node.id + '', this.node)
-            })
+          api.dispatchCustomEvent(
+            type,
+            getEvent(detail, `${this.node.id}`, this.node)
           )
         }
       }
@@ -1380,7 +1385,7 @@ export class GroupNodeHandler {
   static async fromNodes(nodes: LGraphNode[]) {
     // Process the nodes into the stored workflow group node data
     const builder = new GroupNodeBuilder(nodes)
-    const res = builder.build()
+    const res = await builder.build()
     if (!res) return
 
     const { name, nodeData } = res
@@ -1489,8 +1494,8 @@ function ungroupSelectedGroupNodes() {
   }
 }
 
-function manageGroupNodes() {
-  new ManageGroupDialog(app).show()
+function manageGroupNodes(type?: string) {
+  new ManageGroupDialog(app).show(type)
 }
 
 const id = 'Comfy.GroupNode'

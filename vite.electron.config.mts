@@ -10,6 +10,9 @@ const mockElectronAPI: Plugin = {
       {
         tag: 'script',
         children: `window.electronAPI = {
+          restartApp: () => {
+            alert('restartApp')
+          },
           sendReady: () => {},
           onShowSelectDirectory: () => {},
           onFirstTimeSetupComplete: () => {},
@@ -20,7 +23,7 @@ const mockElectronAPI: Plugin = {
             Promise.resolve({
               appData: 'C:/Users/username/AppData/Roaming',
               appPath: 'C:/Program Files/comfyui-electron/resources/app',
-              defaultInstallPath: 'C:/Users/username/comfyui-electron'
+              defaultInstallPath: 'bad'
             }),
           validateInstallPath: (path) => {
             if (path === 'bad') {
@@ -42,7 +45,13 @@ const mockElectronAPI: Plugin = {
             }
             return { isValid: true }
           },
-          showDirectoryPicker: () => Promise.resolve('C:/Users/username/comfyui-electron/1')
+          showDirectoryPicker: () => Promise.resolve('C:/Users/username/comfyui-electron/1'),
+          DownloadManager: {
+            getAllDownloads: () => Promise.resolve([]),
+            onDownloadProgress: () => {}
+          },
+          getElectronVersion: () => Promise.resolve('1.0.0'),
+          getComfyUIVersion: () => '9.9.9'
         };`
       }
     ]

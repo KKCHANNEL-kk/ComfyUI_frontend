@@ -3,7 +3,7 @@
     icon="pi pi-cog"
     class="comfy-settings-btn"
     @click="showSetting"
-    :tooltip="$t('settings')"
+    :tooltip="$t('g.settings')"
   />
 </template>
 
@@ -16,6 +16,7 @@ import SettingDialogHeader from '@/components/dialog/header/SettingDialogHeader.
 const dialogStore = useDialogStore()
 const showSetting = () => {
   dialogStore.showDialog({
+    key: 'global-settings',
     headerComponent: SettingDialogHeader,
     component: SettingDialogContent
   })

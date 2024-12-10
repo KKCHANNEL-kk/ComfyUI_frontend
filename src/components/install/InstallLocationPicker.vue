@@ -16,7 +16,7 @@
             v-model="installPath"
             class="w-full"
             :class="{ 'p-invalid': pathError }"
-            @change="validatePath"
+            @update:modelValue="validatePath"
           />
           <InputIcon
             class="pi pi-info-circle"
@@ -85,6 +85,8 @@ onMounted(async () => {
   appData.value = paths.appData
   appPath.value = paths.appPath
   installPath.value = paths.defaultInstallPath
+
+  await validatePath(paths.defaultInstallPath)
 })
 
 const validatePath = async (path: string) => {

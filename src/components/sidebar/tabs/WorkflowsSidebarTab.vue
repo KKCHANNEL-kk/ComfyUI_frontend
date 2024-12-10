@@ -31,7 +31,7 @@
         class="workflows-search-box p-2 2xl:p-4"
         v-model:modelValue="searchQuery"
         @search="handleSearch"
-        :placeholder="$t('searchWorkflows') + '...'"
+        :placeholder="$t('g.searchWorkflows') + '...'"
       />
     </template>
     <template #body>
@@ -40,7 +40,11 @@
           class="comfyui-workflows-open"
           v-if="workflowTabsPosition === 'Sidebar'"
         >
-          <TextDivider text="Open" type="dashed" class="ml-2" />
+          <TextDivider
+            :text="t('sideToolbar.workflowTab.workflowTreeType.open')"
+            type="dashed"
+            class="ml-2"
+          />
           <TreeExplorer
             :roots="
               renderTreeNode(openWorkflowsTree, WorkflowTreeType.Open).children
@@ -50,10 +54,13 @@
             <template #node="{ node }">
               <TreeExplorerTreeNode :node="node">
                 <template #before-label="{ node }">
-                  <span v-if="node.data.isModified">*</span>
+                  <span v-if="node.data.isModified || !node.data.isPersisted"
+                    >*</span
+                  >
                 </template>
                 <template #actions="{ node }">
                   <Button
+                    class="close-workflow-button"
                     icon="pi pi-times"
                     text
                     :severity="
@@ -71,7 +78,11 @@
           class="comfyui-workflows-bookmarks"
           v-show="workflowStore.bookmarkedWorkflows.length > 0"
         >
-          <TextDivider text="Bookmarks" type="dashed" class="ml-2" />
+          <TextDivider
+            :text="t('sideToolbar.workflowTab.workflowTreeType.bookmarks')"
+            type="dashed"
+            class="ml-2"
+          />
           <TreeExplorer
             :roots="
               renderTreeNode(
@@ -86,17 +97,28 @@
           </TreeExplorer>
         </div>
         <div class="comfyui-workflows-browse">
-          <TextDivider text="Browse" type="dashed" class="ml-2" />
+          <TextDivider
+            :text="t('sideToolbar.workflowTab.workflowTreeType.browse')"
+            type="dashed"
+            class="ml-2"
+          />
           <TreeExplorer
             :roots="
               renderTreeNode(workflowsTree, WorkflowTreeType.Browse).children
             "
             v-model:expandedKeys="expandedKeys"
+            v-if="workflowStore.persistedWorkflows.length > 0"
           >
             <template #node="{ node }">
               <WorkflowTreeLeaf :node="node" />
             </template>
           </TreeExplorer>
+          <NoResultsPlaceholder
+            v-else
+            icon="pi pi-folder"
+            :title="$t('g.empty')"
+            :message="$t('g.noWorkflowsFound')"
+          />
         </div>
       </div>
       <div class="comfyui-workflows-search-panel" v-else>
@@ -113,10 +135,12 @@
       </div>
     </template>
   </SidebarTabTemplate>
+  <ConfirmDialog />
 </template>
 
 <script setup lang="ts">
 import SearchBox from '@/components/common/SearchBox.vue'
+import NoResultsPlaceholder from '@/components/common/NoResultsPlaceholder.vue'
 import WorkflowTreeLeaf from '@/components/sidebar/tabs/workflows/WorkflowTreeLeaf.vue'
 import SidebarTabTemplate from '@/components/sidebar/tabs/SidebarTabTemplate.vue'
 import TreeExplorer from '@/components/common/TreeExplorer.vue'
@@ -139,6 +163,9 @@ import { workflowService } from '@/services/workflowService'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { appendJsonExt } from '@/utils/formatUtil'
 import { buildTree, sortedTree } from '@/utils/treeUtil'
+import { useConfirm } from 'primevue/useconfirm'
+import { useToast } from 'primevue/usetoast'
+import ConfirmDialog from 'primevue/confirmdialog'
 
 const settingStore = useSettingStore()
 const workflowTabsPosition = computed(() =>
@@ -207,6 +234,9 @@ const openWorkflowsTree = computed(() =>
   buildTree(workflowStore.openWorkflows, (workflow) => [workflow.key])
 )
 
+const confirm = useConfirm()
+const toast = useToast()
+
 const renderTreeNode = (
   node: TreeNode,
   type: WorkflowTreeType
@@ -225,6 +255,7 @@ const renderTreeNode = (
       toggleNodeOnEvent(e, node)
     }
   }
+
   const actions = node.leaf
     ? {
         handleClick,
@@ -241,13 +272,13 @@ const renderTreeNode = (
         },
         handleDelete: workflow.isTemporary
           ? undefined
-          : () => {
-              workflowService.deleteWorkflow(workflow)
+          : async () => {
+              await workflowService.deleteWorkflow(workflow)
             },
         contextMenuItems: (node: TreeExplorerNode<ComfyWorkflow>) => {
           return [
             {
-              label: t('insert'),
+              label: t('g.insert'),
               icon: 'pi pi-file-export',
               command: () => {
                 const workflow = node.data
